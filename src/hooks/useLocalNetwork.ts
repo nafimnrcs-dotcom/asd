@@ -42,6 +42,7 @@ export function useLocalNetwork(userName: string, roomId?: string) {
 
         const peersRef = new Map<string, Peer>();
         const pendingConnections = new Set<string>();
+        const pendingIceCandidates = new Map<string, RTCIceCandidateInit[]>();
 
         webrtc.setOnPeerUpdate((updatedPeers) => {
             if (!isActive) return;
@@ -129,6 +130,15 @@ export function useLocalNetwork(userName: string, roomId?: string) {
                         new RTCSessionDescription(message.data as RTCSessionDescriptionInit)
                     );
 
+                    // Add any pending ICE candidates
+                    const pending = pendingIceCandidates.get(message.from);
+                    if (pending) {
+                        for (const candidate of pending) {
+                            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                        }
+                        pendingIceCandidates.delete(message.from);
+                    }
+
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
 
@@ -152,6 +162,16 @@ export function useLocalNetwork(userName: string, roomId?: string) {
                             await peer.connection.setRemoteDescription(
                                 new RTCSessionDescription(message.data as RTCSessionDescriptionInit)
                             );
+
+                            // Add any pending ICE candidates
+                            const pending = pendingIceCandidates.get(message.from);
+                            if (pending) {
+                                for (const candidate of pending) {
+                                    await peer.connection.addIceCandidate(new RTCIceCandidate(candidate));
+                                }
+                                pendingIceCandidates.delete(message.from);
+                            }
+
                             pendingConnections.delete(message.from);
                             console.log('✅ Connected to:', message.fromName);
                         }
@@ -163,9 +183,17 @@ export function useLocalNetwork(userName: string, roomId?: string) {
                 const peer = peersRef.get(message.from);
                 if (peer?.connection) {
                     try {
-                        await peer.connection.addIceCandidate(
-                            new RTCIceCandidate(message.data as RTCIceCandidateInit)
-                        );
+                        if (peer.connection.remoteDescription) {
+                            await peer.connection.addIceCandidate(
+                                new RTCIceCandidate(message.data as RTCIceCandidateInit)
+                            );
+                        } else {
+                            // Queue ICE candidates until remote description is set
+                            if (!pendingIceCandidates.has(message.from)) {
+                                pendingIceCandidates.set(message.from, []);
+                            }
+                            pendingIceCandidates.get(message.from)?.push(message.data as RTCIceCandidateInit);
+                        }
                     } catch (error) {
                         console.error('❌ Error adding ICE candidate:', error);
                     }
@@ -214,8 +242,19 @@ export function useLocalNetwork(userName: string, roomId?: string) {
     }, []);
 
     const sendMessage = useCallback((content: string) => {
-        webrtcRef.current?.sendMessage(content);
-    }, []);
+        if (!webrtcRef.current) return;
+        webrtcRef.current.sendMessage(content);
+
+        // Add own message to local state with correct peer info
+        const ownMessage: Message = {
+            id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            peerId: localPeerId,
+            peerName: localPeerName,
+            content,
+            timestamp: Date.now(),
+        };
+        setMessages(prev => [...prev, ownMessage]);
+    }, [localPeerId, localPeerName]);
 
     const sendFile = useCallback((file: File) => {
         webrtcRef.current?.sendFile(file);

@@ -113,11 +113,11 @@ function App() {
                     const ringingCalls = calls.filter((call: any) => call.status === 'ringing');
 
                     // Show the most recent ringing call
-                    if (ringingCalls.length > 0 && currentPage !== 'meeting') {
+                    if (ringingCalls.length > 0) {
                         const latestCall = ringingCalls[0];
 
-                        // ✅ Always show if there's a ringing call and we're not already showing one
-                        if (!incomingCall || incomingCall.id !== latestCall.id) {
+                        // Only show if we're the recipient (not the caller)
+                        if (latestCall.toAccountId === account.id && (!incomingCall || incomingCall.id !== latestCall.id)) {
                             console.log('📞 NEW INCOMING CALL:', latestCall);
 
                             const newCall = {

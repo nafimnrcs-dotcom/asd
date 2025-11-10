@@ -19,6 +19,7 @@ interface MeetingRoomProps {
 export function MeetingRoom({ account, roomId, onLeave }: MeetingRoomProps) {
     const [activeTab, setActiveTab] = useState<'chat' | 'files'>('chat');
     const [copied, setCopied] = useState(false);
+    const [isWaitingForOthers, setIsWaitingForOthers] = useState(true);
 
     // Fixed: useLocalNetwork expects 2 parameters (userName, roomId)
     const {
@@ -49,6 +50,13 @@ export function MeetingRoom({ account, roomId, onLeave }: MeetingRoomProps) {
         }
         onLeave();
     };
+
+    // Monitor peer connections
+    useEffect(() => {
+        if (peers.length > 0) {
+            setIsWaitingForOthers(false);
+        }
+    }, [peers]);
 
     // Start video when peer ID is ready
     useEffect(() => {
@@ -192,6 +200,28 @@ export function MeetingRoom({ account, roomId, onLeave }: MeetingRoomProps) {
                     </div>
                 </div>
             </div>
+
+            {isWaitingForOthers && roomId.startsWith('call-') && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+                        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                            <Wifi className="w-10 h-10 text-blue-600" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                            Waiting for others to join...
+                        </h2>
+                        <p className="text-gray-600 mb-6">
+                            The call is active. Waiting for the other person to accept.
+                        </p>
+                        <button
+                            onClick={handleLeave}
+                            className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                        >
+                            Cancel Call
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
